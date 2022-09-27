@@ -1,0 +1,23 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        maven {
+            url uri('repo')
+        }
+    }
+}
+rootProject.name = "annotationdemo"
+include ':app'
+include ':lib_annotation'
+include ':lib_api'
+include ':lib_kapt'
+include ':lib_ksp'
