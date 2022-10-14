@@ -82,7 +82,7 @@ class SecondActivity : AppCompatActivity() {
         if (str.isNullOrBlank()) {
             return
         }
-        Log.d("Abel12", str)
+        Log.d("Abel123", str)
     }
 }
 

@@ -17,6 +17,7 @@ import com.squareup.kotlinpoet.ksp.writeTo
 @AutoService(SymbolProcessorProvider::class)
 class BindViewSymbolProcessorProvider : SymbolProcessorProvider {
     companion object {
+        @Suppress("SpellCheckingInspection")
         val BINDVIEW_PROCESS: String = BindView::class.qualifiedName!!
     }
 
@@ -46,8 +47,9 @@ class BindViewSymbolProcessor(
         val bindViewElement: List<KSPropertyDeclaration> =
             symbols.filter { it.validate() && it is KSPropertyDeclaration && it.parent is KSClassDeclaration }
                 .toList() as List<KSPropertyDeclaration>
-
-        CodeGen.gen(bindViewElement, codeGenerator, logger)
+        if (bindViewElement.isNotEmpty()) {
+            CodeGen.gen(bindViewElement, codeGenerator, logger)
+        }
         return ret
     }
 
@@ -72,7 +74,9 @@ class BindViewSymbolProcessor(
                 val parent = item.value[0].parent as KSClassDeclaration
                 val parentClassName = parent.toClassName()
 
-                // TODO check classItem is the subclass Activity
+                logger.check(parent.isSubclassOf("android.app.Activity")) {
+                    "@BindView can be only apply in [Activity]`s field, but you class is ${parentClassName.canonicalName}"
+                }
                 val packageName = parentClassName.packageName
                 val fileSimpleName = parentClassName.simpleNames.joinToString("$") + "\$ViewBinding"
 
