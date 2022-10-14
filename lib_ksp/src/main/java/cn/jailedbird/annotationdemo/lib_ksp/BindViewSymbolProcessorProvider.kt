@@ -1,20 +1,23 @@
 package cn.jailedbird.annotationdemo.lib_ksp
 
 import cn.jailedbird.annotationdemo.lib_annotation.BindView
-import cn.jailedbird.annotationdemo.lib_ksp.BindViewSymbolProcessorProvider.Companion.PROCESS
+import cn.jailedbird.annotationdemo.lib_ksp.BindViewSymbolProcessorProvider.Companion.BINDVIEW_PROCESS
 import com.google.auto.service.AutoService
 import com.google.devtools.ksp.processing.*
-import com.google.devtools.ksp.symbol.*
+import com.google.devtools.ksp.symbol.KSAnnotated
+import com.google.devtools.ksp.symbol.KSClassDeclaration
+import com.google.devtools.ksp.symbol.KSFile
+import com.google.devtools.ksp.symbol.KSPropertyDeclaration
 import com.google.devtools.ksp.validate
 import com.squareup.kotlinpoet.*
+import com.squareup.kotlinpoet.ksp.originatingKSFiles
 import com.squareup.kotlinpoet.ksp.toClassName
-import com.squareup.kotlinpoet.ksp.toTypeName
 import com.squareup.kotlinpoet.ksp.writeTo
 
 @AutoService(SymbolProcessorProvider::class)
 class BindViewSymbolProcessorProvider : SymbolProcessorProvider {
     companion object {
-        val PROCESS: String = BindView::class.qualifiedName!!
+        val BINDVIEW_PROCESS: String = BindView::class.qualifiedName!!
     }
 
     override fun create(environment: SymbolProcessorEnvironment): SymbolProcessor {
@@ -34,7 +37,7 @@ class BindViewSymbolProcessor(
     // About ksp debug https://github.com/google/ksp/issues/31
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
-        val symbols = resolver.getSymbolsWithAnnotation(PROCESS)
+        val symbols = resolver.getSymbolsWithAnnotation(BINDVIEW_PROCESS)
         // return can not be resolve elements in this turn
         val ret = symbols.filter { !it.validate() }.toList()
 
@@ -66,10 +69,12 @@ class BindViewSymbolProcessor(
                 if (item.key.isEmpty() || item.value.isEmpty()) {
                     continue
                 }
-                val classItem = (item.value[0].parent as KSClassDeclaration).toClassName()
+                val parent = item.value[0].parent as KSClassDeclaration
+                val parentClassName = parent.toClassName()
+
                 // TODO check classItem is the subclass Activity
-                val packageName = classItem.packageName
-                val fileSimpleName = classItem.simpleNames.joinToString("$") + "\$ViewBinding"
+                val packageName = parentClassName.packageName
+                val fileSimpleName = parentClassName.simpleNames.joinToString("$") + "\$ViewBinding"
 
                 val fileSpecBuilder = FileSpec.builder(
                     packageName,
@@ -80,16 +85,16 @@ class BindViewSymbolProcessor(
                 val activityParamName = "activity"
                 // constructor init(activity:MainActivity)
                 val functionBuilder = FunSpec.constructorBuilder()
-                    .addParameter(activityParamName, ClassName(packageName, classItem.simpleNames))
+                    .addParameter(
+                        activityParamName,
+                        ClassName(packageName, parentClassName.simpleNames)
+                    )
 
                 // @BindView val textView TextView
-                for (i in item.value) {
+                for (bindView in item.value) {
                     // textView
-                    val symbolName = i.simpleName.asString()
-                    // TODO select @BindView by firstOrNull, perhaps can optimize
-                    val annotationValue = (i.annotations.firstOrNull {
-                        it.annotationType.toTypeName().toString() == PROCESS
-                    }?.arguments?.firstOrNull()?.value as? Int) ?: 0
+                    val symbolName = bindView.simpleName.asString()
+                    val annotationValue = bindView.findAnnotationWithType<BindView>()?.value ?: 0
 
                     if (annotationValue == 0) {
                         logger.error("@BindView's value need assign a not-zer0 value")
@@ -99,10 +104,16 @@ class BindViewSymbolProcessor(
                 }
 
                 typeSpec.addFunction(functionBuilder.build())
-
-                fileSpecBuilder.addType(typeSpec.build())
+                val file = fileSpecBuilder.addType(typeSpec.build())
                     .build()
-                    .writeTo(codeGenerator, false)
+
+                val dependency: List<KSFile> = if (parent.containingFile != null) {
+                    listOf(parent.containingFile!!)
+                } else {
+                    file.originatingKSFiles()
+                }
+
+                file.writeTo(codeGenerator, false, dependency)
             }
         }
     }
